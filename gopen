@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+import os
+import re
+import sys
+import argparse
+import subprocess
+import platform
+from pathlib import Path
+
+class GitHubCLITool:
+    def __init__(self):
+        self.repo_root = self._find_git_root()
+        self.remote_url = self._get_github_remote_url()
+    
+    def _find_git_root(self):
+        """Find the root directory of the current git repository."""
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--show-toplevel'], 
+                capture_output=True, 
+                text=True, 
+                check=True
+            )
+            return result.stdout.strip()
+        except subprocess.CalledProcessError:
+            return None
+    
+    def _get_github_remote_url(self):
+        """Get the GitHub remote URL of the current repository."""
+        try:
+            result = subprocess.run(
+                ['git', 'config', '--get', 'remote.origin.url'], 
+                capture_output=True, 
+                text=True, 
+                check=True
+            )
+            url = result.stdout.strip()
+            # Clean and standardize URL
+            url = re.sub(r'^git@github\.com:|\.git$', '', url)
+            return f'{url}'
+        except subprocess.CalledProcessError:
+            return None
+    
+    def _get_current_branch(self):
+        """Get the current branch name."""
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'], 
+                capture_output=True, 
+                text=True, 
+                check=True
+            )
+            return result.stdout.strip()
+        except subprocess.CalledProcessError:
+            return None
+    
+    def _open_url(self, url):
+        """Open URL in default browser."""
+        if not self.remote_url:
+            print("Not in a valid git repository!")
+            return
+        
+        os_name = platform.system().lower()
+        try:
+            if os_name == 'darwin':  # macOS
+                subprocess.run(['open', url], check=True)
+            elif os_name == 'linux':
+                subprocess.run(['xdg-open', url], check=True)
+            elif os_name == 'windows':
+                subprocess.run(['start', url], shell=True, check=True)
+            else:
+                print(f"Unsupported OS: {os_name}")
+                return
+            
+        except Exception as e:
+            print(f"Error opening URL: {e}")
+
+    def open_file_in_github(self, branch=None,file_path=None, line_number=None):
+        """
+        Open a file in GitHub website, optionally at a specific line.
+        
+        :param file_path: Path to the file relative to repo root. 
+                          If None, uses current file.
+        :param line_number: Specific line to highlight
+        """
+        if not self.repo_root:
+            print("Not in a valid git repository!")
+            return
+
+        if not branch:
+            branch = self._get_current_branch()
+        
+        if not branch:
+            print("Could not determine current branch.")
+            return
+        
+        
+        # If no file specified, use current file
+        if file_path is None:
+            current_dir = os.getcwd()
+            file_path = os.path.relpath(current_dir, self.repo_root)
+        else:
+            # Ensure file_path is relative to repo root
+            file_path = os.path.relpath(os.path.abspath(file_path), self.repo_root)
+        
+        # Construct GitHub URL
+        file_url = f"{self.remote_url}/blob/{branch}/{file_path}"
+        
+        # Add line number if specified
+        if line_number:
+            file_url += f"#L{line_number}"
+        
+        # Open URL
+        self._open_url(file_url) 
+
+    def compare_branches(self, branch1=None, branch2=None):
+        """
+        Generate a comparison URL between two branches.
+        
+        :param branch1: First branch (defaults to current branch)
+        :param branch2: Second branch (defaults to main/master)
+        """
+        # Use current branch if not specified
+        if branch1 is None:
+            branch1 = self._get_current_branch()
+        
+        # Use main or master as default second branch
+        if branch2 is None:
+            try:
+                subprocess.run(['git', 'show-ref', '--verify', 'refs/heads/main'], check=True)
+                branch2 = 'main'
+            except subprocess.CalledProcessError:
+                branch2 = 'master'
+        
+        compare_url = f"{self.remote_url}/compare/{branch2}...{branch1}"
+        
+        # Open URL
+        self._open_url(compare_url)
+    
+    def validate_branch(self, branch_name):
+        """
+        Validate if the given branch name exists in the repository.
+    
+        :param branch_name: Name of the branch to validate
+        :return: True if branch exists, False otherwise
+        """
+        try:
+            result = subprocess.run(
+                ['git', 'show-ref', '--verify', f'refs/heads/{branch_name}'], 
+                capture_output=True, 
+                text=True,
+                check=False
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+def main():
+    # Create argument parser
+    parser = argparse.ArgumentParser(description='GitHub CLI Utility')
+    
+    # Add file argument
+    parser.add_argument('file', nargs='?', help='File to open in GitHub')
+    
+    # Add optional arguments
+    parser.add_argument('--branch', type=str, help='Specify a branch name')
+    parser.add_argument('--line', type=int, help='Specific line number to highlight')
+    parser.add_argument('--compare', action='store_true', help='Compare current branch with main/master')
+    parser.add_argument('--base', help='Base branch for comparison (default: main/master)')
+    parser.add_argument('--head', help='Head branch for comparison (default: current branch)')
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Initialize tool
+    tool = GitHubCLITool()
+
+    if args.branch:
+        if not tool.validate_branch(args.branch):
+            print(f"Error: Branch '{args.branch}' does not exist.")
+            sys.exit(1)
+    
+    # Execute based on arguments
+    if args.compare:
+        tool.compare_branches(args.head, args.base)
+    elif args.file:
+        tool.open_file_in_github(args.branch, args.file, args.line)
+    else:
+        tool.open_file_in_github()
+
+if __name__ == "__main__":
+    main()
