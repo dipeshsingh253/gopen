@@ -11,6 +11,10 @@
 
 Follow these steps to install `gopen` and set it up for global use:
 
+Or execute this to complete the setup in a single command.
+```bash
+curl -o ~/.local/bin/gopen https://raw.githubusercontent.com/dipeshsingh253/gopen/main/gopen && chmod +x ~/.local/bin/gopen
+```
 ### 1. Download the Script
 Clone the repository or download the `gopen.py` file manually:
 ```bash
@@ -70,13 +74,20 @@ gopen [-h] [--branch BRANCH] [--line LINE] [--compare] [--base BASE] [--head HEA
 
 3. **Highlight a Specific Line in a File:**
    ```bash
-   gopen README.md --line 42
+   gopen README.md --line 42 --branch feature-branch
    ```
 
-4. **Compare Branches:**
+4. **Compare Between Branches:**
    ```bash
+   gopen --compare // default base main and head current branch
    gopen --compare --base main --head feature-branch
    ```
+   
+5. **Compare Between Commits:**
+   ```bash
+   gopen --compare --base <commit-hash-1> --head <commit-hash-2>
+   ```
+
 
 ## Contributions
 Contributions, bug reports, and feature requests are welcome! Feel free to open an issue or submit a pull request.
